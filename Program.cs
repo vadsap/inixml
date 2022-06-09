@@ -1,25 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
-using System.Configuration;
-using System.Xml.Serialization;
-
-static string GetSectionContent(IConfiguration configSection)
-{
-    string sectionContent = "";
-    foreach (var section in configSection.GetChildren())
-    {
-        sectionContent += "\"" + section.Key + "\":";
-        if(section.Value==null)
-        {
-            string subSectionContent = GetSectionContent(section);
-            sectionContent += "{\n" + subSectionContent + "},\n";
-        }
-        else
-        {
-            sectionContent += "\"" + section.Value + "\",\n";
-        }
-    }
-    return sectionContent;
-}
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.PlatformAbstractions;
+using System.Diagnostics;
 
 var Configuration = new ConfigurationBuilder()
     .AddIniFile("in.ini", optional: false, reloadOnChange: true)
@@ -27,9 +10,19 @@ var Configuration = new ConfigurationBuilder()
 
 Console.WriteLine(Configuration["Position:Title_"]);
 
-var data = new MyClass{ Field1 = "test1", Field2 = "test2" };
-var serializer = new XmlSerializer(typeof(MyClass));
-using (var stream = new StreamWriter("out.xml"))
-    serializer.Serialize(stream, data);
+var dl = new DiagnosticListener("Microsoft.AspNetCore");
+var services = new ServiceCollection();
+var applicationEnvironment = PlatformServices.Default.Application;
+services.AddSingleton(applicationEnvironment);
+services.AddLogging();
+services.AddMvc();
+services.AddSingleton<Cshtml.RRender>();
+services.AddSingleton<ObjectPoolProvider, DefaultObjectPoolProvider>();
+services.AddSingleton<DiagnosticListener>(dl);
+services.AddSingleton<DiagnosticSource>(dl);
+
+var provider = services.BuildServiceProvider();
+var razor = provider.GetRequiredService<Cshtml.RRender>();
+var view = await razor.Render("view.cshtml", Configuration);
 
 Console.ReadLine();
